@@ -259,6 +259,25 @@ export default function App() {
   const [draft, setDraft] = useState(hasDraft);
   const [copied, setCopied] = useState(false);
 
+  // Airtable sync
+  const [webhookUrl, setWebhookUrl] = useState(() => { try { return localStorage.getItem("airtable_webhook_url") || ""; } catch { return ""; } });
+  const [syncMsg, setSyncMsg] = useState("");
+  function saveWebhook(v) { setWebhookUrl(v); try { localStorage.setItem("airtable_webhook_url", v); } catch {} }
+  function overallStats() {
+    let done = 0, total = 0;
+    Object.keys(content).forEach(k => { const s = getStats(Number(k)); done += s.done; total += s.total; });
+    return { done, total, pct: total ? Math.round(done / total * 100) : 0 };
+  }
+  async function syncToAirtable() {
+    if (!webhookUrl) { setSyncMsg("⚠ הגדר כתובת webhook במסך הבית"); setTimeout(() => setSyncMsg(""), 4000); return; }
+    const o = overallStats();
+    try {
+      await fetch(webhookUrl, { method: "POST", mode: "no-cors", body: JSON.stringify({ client: clientName, done: o.done, total: o.total, pct: o.pct, completed: o.pct === 100, updatedAt: new Date().toISOString() }) });
+      setSyncMsg(o.pct === 100 ? "✓ נשלח ל-Airtable - הלקוח סומן כהושלם" : `↗ נשלח ל-Airtable (${o.pct}%)`);
+    } catch { setSyncMsg("✗ שליחה נכשלה - בדוק את כתובת ה-webhook"); }
+    setTimeout(() => setSyncMsg(""), 4500);
+  }
+
   useEffect(() => { loadClientList(); }, []);
 
   async function loadClientList() {
@@ -410,6 +429,18 @@ export default function App() {
           </button>
           {draft && <span style={{ fontSize: 12, color: "#BA7517" }}>📝 יש טיוטה לא מפורסמת</span>}
         </div>
+
+        <div style={{ marginTop: 12, background: "#F8F7F4", borderRadius: 10, border: "0.5px solid #D3D1C7", padding: "10px 12px" }}>
+          <div style={{ fontSize: 12, fontWeight: 500, color: "#5F5E5A", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+            🔗 סנכרון Airtable {webhookUrl ? <span style={{ color: "#1D9E75" }}>● מחובר</span> : <span style={{ color: "#BA7517" }}>● לא מוגדר</span>}
+          </div>
+          <input value={webhookUrl} onChange={e => saveWebhook(e.target.value)} dir="ltr"
+            placeholder="הדבק כאן כתובת Airtable webhook..."
+            style={{ width: "100%", padding: "7px 10px", fontSize: 12, borderRadius: 6, border: "0.5px solid #D3D1C7", background: "white", boxSizing: "border-box", textAlign: "left" }} />
+          <div style={{ fontSize: 11, color: "#888780", marginTop: 5, lineHeight: 1.5 }}>
+            הכתובת נשמרת בדפדפן הזה בלבד ולא נחשפת באתר. כשלקוח מגיע ל-100% - לחץ "סנכרן ל-Airtable" בתוך הצ׳קליסט.
+          </div>
+        </div>
       </div>
     );
   }
@@ -426,13 +457,18 @@ export default function App() {
           ← חזרה
         </button>
         <span style={{ fontSize: 16, fontWeight: 500 }}>📁 {clientName}</span>
+        <button onClick={syncToAirtable}
+          style={{ marginRight: "auto", fontSize: 13, padding: "4px 10px", borderRadius: 6, border: `0.5px solid ${pct === 100 ? "#1D9E75" : "#D3D1C7"}`, background: pct === 100 ? "#E1F5EE" : "#F1EFE8", color: pct === 100 ? "#085041" : "#5F5E5A", cursor: "pointer", fontFamily: "inherit" }}>
+          ↗ סנכרן ל-Airtable
+        </button>
         <button onClick={() => setScreen("editor")}
-          style={{ marginRight: "auto", fontSize: 13, padding: "4px 10px", borderRadius: 6, border: "0.5px solid #AFA9EC", background: "#EEEDFE", color: "#3C3489", cursor: "pointer", fontFamily: "inherit" }}>
-          ✏️ עריכת תוכן
+          style={{ fontSize: 13, padding: "4px 10px", borderRadius: 6, border: "0.5px solid #AFA9EC", background: "#EEEDFE", color: "#3C3489", cursor: "pointer", fontFamily: "inherit" }}>
+          ✏️ עריכה
         </button>
         {saving && <span style={{ fontSize: 12, color: "#888780" }}>שומר...</span>}
         {!saving && lastSaved && <span style={{ fontSize: 12, color: "#1D9E75" }}>✓ נשמר</span>}
       </div>
+      {syncMsg && <div style={{ fontSize: 13, padding: "8px 12px", borderRadius: 8, background: "#F1EFE8", border: "0.5px solid #D3D1C7", marginBottom: 12, color: "#2C2C2A" }}>{syncMsg}</div>}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", borderBottom: "0.5px solid #D3D1C7", marginBottom: "1rem" }}>
         {Object.keys(content).map(k => {
